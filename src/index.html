@@ -37,9 +37,12 @@
   <main class="main" id="main" aria-live="polite"></main>
 
   <div class="lightbox" id="lightbox" hidden>
-    <div class="lb-stage" id="lbStage">
-      <img id="lbImg" alt="" draggable="false">
-      <div class="shield"></div>
+    <div class="lb-viewport" id="lbViewport">
+      <div class="lb-track" id="lbTrack">
+        <div class="lb-slide"><img alt="" draggable="false"></div>
+        <div class="lb-slide"><img alt="" draggable="false"></div>
+        <div class="lb-slide"><img alt="" draggable="false"></div>
+      </div>
     </div>
     <button class="lb-btn lb-close" id="lbClose" aria-label="Close">
       <svg viewBox="0 0 24 24"><path d="M5 5l14 14M19 5L5 19"/></svg></button>
