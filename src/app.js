@@ -176,6 +176,8 @@
   function route() {
     closeLightbox(true);
     const [, section, slug] = (location.hash.replace(/^#\/?/, '#/') || '#/').split('/');
+    // The home page is a single screen: no scrolling
+    document.body.classList.toggle('is-home', !['destinations', 'about', 'contact'].includes(section));
     if (section === 'destinations' && slug) { markActive('destinations', slug); viewDestination(slug); }
     else if (section === 'destinations') { markActive('destinations'); viewDestinations(); }
     else if (section === 'about') { markActive('about'); viewAbout(); }
