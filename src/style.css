@@ -214,8 +214,16 @@ img.loaded { opacity: 1; }
   .main { margin-left: 0; padding: 24px 16px 56px; }
   .page-title { font-size: 28px; }
   .slideshow { height: calc(100vh - 150px); }
+  .slideshow img { object-position: center; }
   .dest-grid { grid-template-columns: 1fr 1fr; gap: 28px 12px; }
   .lb-stage, .lb-stage img { max-width: 100vw; max-height: calc(100vh - 120px); }
   .lb-prev, .lb-next { top: auto; bottom: 8px; transform: none; }
   .lb-prev { left: 8px; } .lb-next { right: 8px; }
 }
+
+/* Instagram icon */
+.social { margin-top: 10px; }
+.social a { display: inline-flex; opacity: .8; transition: opacity .2s; }
+.social a:hover { opacity: 1; }
+.social svg { width: 18px; height: 18px; fill: none; stroke: var(--ink); stroke-width: 1.4; }
+.social .dot { fill: var(--ink); stroke: none; }
