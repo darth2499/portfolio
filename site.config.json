@@ -1,0 +1,21 @@
+{
+  "name": "Yuki Asahina",
+  "tagline": "Photographer",
+  "description": "Travel photography by Yuki Asahina.",
+  "about": "I'm a photographer and filmmaker based in the San Francisco Bay Area. These are photographs from the places I've been lucky enough to travel to.",
+  "email": "yuki@gear.id",
+  "instagram": "",
+  "cname": "",
+
+  "images": {
+    "fullSize": 2000,
+    "thumbWidth": 900,
+    "quality": 82,
+    "watermark": "© Yuki Asahina"
+  },
+
+  "home": {
+    "slideshowCount": 8,
+    "slideSeconds": 5
+  }
+}

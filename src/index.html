@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{NAME}} — Photography</title>
+  <meta name="description" content="{{DESCRIPTION}}">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;500&family=Jost:wght@300;400;500&display=swap" rel="stylesheet">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 32 32%22%3E%3Ccircle cx=%2216%22 cy=%2216%22 r=%2210%22 fill=%22none%22 stroke=%22%231a1a1a%22 stroke-width=%222%22/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="sidebar" id="sidebar">
+    <div class="brand">
+      <a href="#/" class="brand-name">{{NAME}}</a>
+      <button class="menu-btn" id="menuBtn" aria-label="Menu" aria-expanded="false"><span></span><span></span></button>
+    </div>
+    <nav class="nav" id="nav">
+      <ul>
+        <li class="folder" id="destFolder">
+          <button class="folder-toggle" id="destToggle" aria-expanded="false">Destinations</button>
+          <div class="sub"><ul class="sub-inner" id="destList"></ul></div>
+        </li>
+        <li><a href="#/about" data-route="about">About</a></li>
+        <li><a href="#/contact" data-route="contact">Contact</a></li>
+        <li id="igItem" hidden><a id="igLink" target="_blank" rel="noopener">Instagram</a></li>
+      </ul>
+      <p class="copyright" id="copyright"></p>
+    </nav>
+  </header>
+
+  <main class="main" id="main" aria-live="polite"></main>
+
+  <div class="lightbox" id="lightbox" hidden>
+    <div class="lb-stage" id="lbStage">
+      <img id="lbImg" alt="" draggable="false">
+      <div class="shield"></div>
+    </div>
+    <button class="lb-btn lb-close" id="lbClose" aria-label="Close">
+      <svg viewBox="0 0 24 24"><path d="M5 5l14 14M19 5L5 19"/></svg></button>
+    <button class="lb-btn lb-prev" id="lbPrev" aria-label="Previous">
+      <svg viewBox="0 0 24 24"><path d="M15 4l-8 8 8 8"/></svg></button>
+    <button class="lb-btn lb-next" id="lbNext" aria-label="Next">
+      <svg viewBox="0 0 24 24"><path d="M9 4l8 8-8 8"/></svg></button>
+    <div class="lb-count" id="lbCount"></div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
