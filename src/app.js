@@ -29,6 +29,9 @@
     $('#destList').innerHTML = destinations
       .map((d) => `<li><a href="#/destinations/${d.slug}" data-slug="${d.slug}">${esc(d.name)}</a></li>`).join('');
     $('#copyright').textContent = `© ${new Date().getFullYear()} ${site.name || ''}`;
+    // Stagger order for the phone menu's reveal animation
+    document.querySelectorAll('#nav .folder-toggle, #nav .sub-inner li, #nav > ul > li:not(.folder), #nav .copyright')
+      .forEach((el, i) => { el.classList.add('anim'); el.style.setProperty('--d', i); });
     if (site.instagram) {
       const handle = site.instagram.replace(/^@/, '').replace(/^https?:\/\/(www\.)?instagram\.com\//, '').replace(/\/$/, '');
       $('#igLink').href = `https://instagram.com/${handle}`;
@@ -39,19 +42,23 @@
     $('#destFolder').classList.toggle('open', open);
     $('#destToggle').setAttribute('aria-expanded', open);
   }
+  const isPhone = () => matchMedia('(max-width: 760px)').matches;
+  function setMenu(open) {
+    $('#sidebar').classList.toggle('menu-open', open);
+    document.body.classList.toggle('no-scroll', open);
+    $('#menuBtn').setAttribute('aria-expanded', open);
+    $('#menuBtn').setAttribute('aria-label', open ? 'Close menu' : 'Menu');
+  }
   $('#destToggle').addEventListener('click', () => {
+    if (isPhone()) { setMenu(false); location.hash = '#/destinations'; return; }
     const open = !$('#destFolder').classList.contains('open');
     setFolder(open);
     if (open && !location.hash.startsWith('#/destinations')) location.hash = '#/destinations';
   });
-  $('#menuBtn').addEventListener('click', () => {
-    const open = !$('#sidebar').classList.contains('menu-open');
-    $('#sidebar').classList.toggle('menu-open', open);
-    $('#menuBtn').setAttribute('aria-expanded', open);
-  });
-  $('#nav').addEventListener('click', (e) => {
-    if (e.target.closest('a')) { $('#sidebar').classList.remove('menu-open'); $('#menuBtn').setAttribute('aria-expanded', false); }
-  });
+  $('#menuBtn').addEventListener('click', () => setMenu(!$('#sidebar').classList.contains('menu-open')));
+  $('#nav').addEventListener('click', (e) => { if (e.target.closest('a')) setMenu(false); });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') setMenu(false); });
+  window.addEventListener('resize', () => { if (!isPhone()) setMenu(false); });
 
   function markActive(route, slug) {
     document.querySelectorAll('.nav a').forEach((a) => a.classList.remove('active'));
