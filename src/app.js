@@ -183,48 +183,99 @@
     else { markActive(null); viewHome(); }
   }
 
-  /* ---------- Lightbox ---------- */
-  const lb = $('#lightbox'), lbImg = $('#lbImg');
-  let lbList = [], lbIdx = 0;
-  function show(i) {
-    lbIdx = (i + lbList.length) % lbList.length;
-    const p = lbList[lbIdx];
-    lbImg.style.opacity = 0;
-    const pre = new Image();
-    pre.onload = () => { lbImg.src = p.f; lbImg.style.opacity = 1; };
-    pre.src = p.f;
+  /* ---------- Lightbox (swipeable 3-slide carousel) ---------- */
+  const lb = $('#lightbox'), track = $('#lbTrack'), viewport = $('#lbViewport');
+  let lbList = [], lbIdx = 0, busy = false;
+  const CENTER = -100 / 3; // track is 3 slides wide; the middle one is on screen
+  const at = (o) => lbList[(lbIdx + o + lbList.length) % lbList.length];
+  const setX = (px, animate) => {
+    track.classList.toggle('animating', !!animate);
+    track.style.transform = `translate3d(calc(${CENTER}% + ${px}px),0,0)`;
+  };
+  function setSrc(img, p) {
+    if (img.dataset.url === p.f) return;
+    img.dataset.url = p.f;
+    img.classList.remove('loaded');
+    img.onload = () => img.classList.add('loaded');
+    img.src = p.f;
+    if (img.complete && img.naturalWidth) img.classList.add('loaded');
+  }
+  function fill() {
+    const [a, b, c] = track.children;
+    setSrc(a.firstElementChild, at(-1));
+    setSrc(b.firstElementChild, at(0));
+    setSrc(c.firstElementChild, at(1));
     $('#lbCount').textContent = `${lbIdx + 1} / ${lbList.length}`;
-    [1, -1].forEach((o) => { new Image().src = lbList[(lbIdx + o + lbList.length) % lbList.length].f; });
+    new Image().src = at(2).f; new Image().src = at(-2).f; // warm the cache
+  }
+  // Slide one photo left (dir = 1) or right (dir = -1)
+  function go(dir) {
+    if (busy || lbList.length < 2) return;
+    busy = true;
+    setX(-dir * viewport.clientWidth, true);
+    const done = () => {
+      track.removeEventListener('transitionend', done);
+      clearTimeout(fallback);
+      lbIdx = (lbIdx + dir + lbList.length) % lbList.length;
+      // Recycle the slide that left the screen instead of reloading images (no flicker)
+      if (dir > 0) track.appendChild(track.firstElementChild);
+      else track.insertBefore(track.lastElementChild, track.firstElementChild);
+      setX(0, false);
+      fill();
+      busy = false;
+    };
+    const fallback = setTimeout(done, 600);
+    track.addEventListener('transitionend', done);
   }
   function openLightbox(list, i) {
-    lbList = list; lb.hidden = false; document.body.style.overflow = 'hidden';
+    lbList = list; lbIdx = i; busy = false;
+    lb.hidden = false; document.body.style.overflow = 'hidden';
+    setX(0, false); fill();
     requestAnimationFrame(() => lb.classList.add('show'));
-    show(i);
   }
   function closeLightbox(instant) {
     if (lb.hidden) return;
     lb.classList.remove('show'); document.body.style.overflow = '';
-    if (instant) { lb.hidden = true; lbImg.removeAttribute('src'); }
-    else setTimeout(() => { lb.hidden = true; lbImg.removeAttribute('src'); }, 300);
+    if (instant) lb.hidden = true;
+    else setTimeout(() => { lb.hidden = true; }, 300);
   }
   $('#lbClose').onclick = () => closeLightbox();
-  $('#lbPrev').onclick = () => show(lbIdx - 1);
-  $('#lbNext').onclick = () => show(lbIdx + 1);
-  $('#lbStage').onclick = () => show(lbIdx + 1);
-  lb.addEventListener('click', (e) => { if (e.target === lb) closeLightbox(); });
+  $('#lbPrev').onclick = () => go(-1);
+  $('#lbNext').onclick = () => go(1);
   document.addEventListener('keydown', (e) => {
     if (lb.hidden) return;
     if (e.key === 'Escape') closeLightbox();
-    if (e.key === 'ArrowRight') show(lbIdx + 1);
-    if (e.key === 'ArrowLeft') show(lbIdx - 1);
+    if (e.key === 'ArrowRight') go(1);
+    if (e.key === 'ArrowLeft') go(-1);
   });
-  let tx = null;
-  lb.addEventListener('touchstart', (e) => { tx = e.touches[0].clientX; }, { passive: true });
-  lb.addEventListener('touchend', (e) => {
-    if (tx === null) return;
-    const dx = e.changedTouches[0].clientX - tx; tx = null;
-    if (Math.abs(dx) > 40) show(lbIdx + (dx < 0 ? 1 : -1));
+
+  // Finger-tracking swipe: the photo follows your finger, then glides to the next one
+  let sx = 0, sy = 0, st = 0, dx = 0, dragging = false, locked = null, moved = false;
+  viewport.addEventListener('touchstart', (e) => {
+    if (busy || e.touches.length > 1) return;
+    sx = e.touches[0].clientX; sy = e.touches[0].clientY; st = performance.now();
+    dx = 0; dragging = true; locked = null; moved = false;
+  }, { passive: true });
+  viewport.addEventListener('touchmove', (e) => {
+    if (!dragging) return;
+    const mx = e.touches[0].clientX - sx, my = e.touches[0].clientY - sy;
+    if (locked === null && (Math.abs(mx) > 6 || Math.abs(my) > 6)) locked = Math.abs(mx) > Math.abs(my) ? 'x' : 'y';
+    if (locked !== 'x') return;
+    e.preventDefault();
+    moved = true;
+    dx = lbList.length < 2 ? mx * 0.3 : mx; // rubber-band if there's only one photo
+    setX(dx, false);
+  }, { passive: false });
+  viewport.addEventListener('touchend', () => {
+    if (!dragging) return;
+    dragging = false;
+    if (locked !== 'x') return;
+    const w = viewport.clientWidth, v = dx / (performance.now() - st); // px per ms
+    if (lbList.length > 1 && (Math.abs(dx) > w * 0.2 || Math.abs(v) > 0.4)) go(dx < 0 ? 1 : -1);
+    else setX(0, true);
   });
+  // Tap / click on the photo = next (ignored right after a swipe)
+  viewport.addEventListener('click', () => { if (!moved) go(1); moved = false; });
 
   /* ---------- Boot ---------- */
   fetch('data.json', { cache: 'no-cache' }).then((r) => r.json()).then((d) => {
