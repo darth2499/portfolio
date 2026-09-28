@@ -1,226 +1,238 @@
-(() => {
-  const $ = (s, el = document) => el.querySelector(s);
-  const main = $('#main');
-  const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-  let data = { site: {}, destinations: [] };
-  let slideTimer = null;
+:root {
+  --bg: #fff;
+  --ink: #1a1a1a;
+  --muted: #8a8a8a;
+  --line: #e8e8e6;
+  --sidebar: 280px;
+  --gap: 12px;
+  --row: 420px;           /* target row height of the photo grid */
+  --serif: "Inter", -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif;
+  --sans: "Inter", -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif;
+}
 
-  /* ---------- Download deterrents ---------- */
-  // Honest note: nothing stops a screenshot. These stop casual right-click / drag / long-press saves.
-  const guarded = (el) => el.closest && el.closest('.tile, .dest-card, .slideshow, .lightbox');
-  document.addEventListener('contextmenu', (e) => { if (guarded(e.target)) e.preventDefault(); });
-  document.addEventListener('dragstart', (e) => { if (e.target.tagName === 'IMG') e.preventDefault(); });
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font: 300 15px/1.6 var(--sans);
+  -webkit-font-smoothing: antialiased;
+}
+a { color: inherit; text-decoration: none; }
+button { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; }
 
-  /* ---------- Lazy fade-in ---------- */
-  const io = 'IntersectionObserver' in window ? new IntersectionObserver((entries) => {
-    for (const en of entries) if (en.isIntersecting) { load(en.target); io.unobserve(en.target); }
-  }, { rootMargin: '600px 0px' }) : null;
-  function load(img) {
-    img.onload = () => img.classList.add('loaded');
-    img.src = img.dataset.src;
-  }
-  function lazy(root) {
-    root.querySelectorAll('img.lazy').forEach((img) => (io ? io.observe(img) : load(img)));
-  }
+/* ---------- Sidebar ---------- */
+.sidebar {
+  position: fixed; inset: 0 auto 0 0; width: var(--sidebar);
+  padding: 56px 40px 32px 48px;
+  display: flex; flex-direction: column;
+  overflow-y: auto; background: var(--bg); z-index: 20;
+}
+.brand-name {
+  display: block;
+  font: 500 18px/1.3 var(--serif);
+  letter-spacing: .18em;
+  text-transform: uppercase;
+}
+.menu-btn { display: none; }
 
-  /* ---------- Sidebar ---------- */
-  function buildNav() {
-    const { site, destinations } = data;
-    $('#destList').innerHTML = destinations
-      .map((d) => `<li><a href="#/destinations/${d.slug}" data-slug="${d.slug}">${esc(d.name)}</a></li>`).join('');
-    $('#copyright').textContent = `© ${new Date().getFullYear()} ${site.name || ''}`;
-    if (site.instagram) {
-      const handle = site.instagram.replace(/^@/, '').replace(/^https?:\/\/(www\.)?instagram\.com\//, '').replace(/\/$/, '');
-      $('#igLink').href = `https://instagram.com/${handle}`;
-      $('#igItem').hidden = false;
-    }
-  }
-  function setFolder(open) {
-    $('#destFolder').classList.toggle('open', open);
-    $('#destToggle').setAttribute('aria-expanded', open);
-  }
-  $('#destToggle').addEventListener('click', () => {
-    const open = !$('#destFolder').classList.contains('open');
-    setFolder(open);
-    if (open && !location.hash.startsWith('#/destinations')) location.hash = '#/destinations';
-  });
-  $('#menuBtn').addEventListener('click', () => {
-    const open = !$('#sidebar').classList.contains('menu-open');
-    $('#sidebar').classList.toggle('menu-open', open);
-    $('#menuBtn').setAttribute('aria-expanded', open);
-  });
-  $('#nav').addEventListener('click', (e) => {
-    if (e.target.closest('a')) { $('#sidebar').classList.remove('menu-open'); $('#menuBtn').setAttribute('aria-expanded', false); }
-  });
+.nav { margin-top: 44px; flex: 1; display: flex; flex-direction: column; }
+.nav > ul { list-style: none; margin: 0; padding: 0; }
+.nav > ul > li { margin: 0 0 14px; }
+.nav > ul > li > a, .folder-toggle {
+  font-size: 12px; font-weight: 400;
+  letter-spacing: .2em; text-transform: uppercase;
+  transition: color .2s;
+}
+.nav > ul > li > a:hover, .folder-toggle:hover { color: var(--muted); }
+.nav a.active, .folder-toggle.active { color: var(--ink); font-weight: 500; }
 
-  function markActive(route, slug) {
-    document.querySelectorAll('.nav a').forEach((a) => a.classList.remove('active'));
-    $('#destToggle').classList.toggle('active', route === 'destinations');
-    if (slug) $(`.sub a[data-slug="${slug}"]`)?.classList.add('active');
-    else if (route) $(`.nav a[data-route="${route}"]`)?.classList.add('active');
-    if (route === 'destinations') setFolder(true);
-  }
+.sub {
+  margin: 0; padding: 0 0 0 1px;
+  display: grid; grid-template-rows: 0fr;
+  transition: grid-template-rows .35s ease, margin .35s ease;
+}
+.sub > * { min-height: 0; }
+.folder.open .sub { margin: 12px 0 8px; }
+.sub-inner { overflow: hidden; list-style: none; margin: 0; padding: 0; }
+.folder.open .sub { grid-template-rows: 1fr; }
+.sub a {
+  display: block; padding: 3px 0;
+  font-size: 13.5px; color: var(--muted);
+  letter-spacing: .03em;
+  transition: color .2s, transform .2s;
+}
+.sub a:hover { color: var(--ink); }
+.sub a.active { color: var(--ink); }
 
-  /* ---------- Views ---------- */
-  function render(html, title) {
-    clearInterval(slideTimer);
-    ro?.disconnect();
-    main.innerHTML = `<div class="view">${html}</div>`;
-    document.title = title ? `${title} — ${data.site.name}` : `${data.site.name} — Photography`;
-    lazy(main);
-    window.scrollTo(0, 0);
-  }
+.copyright {
+  margin-top: auto; padding-top: 32px;
+  font-size: 11px; color: var(--muted); letter-spacing: .08em;
+}
 
-  function viewHome() {
-    const all = data.destinations.flatMap((d) => d.photos.filter((p) => p.w >= p.h).map((p) => ({ ...p, place: d.name, slug: d.slug })));
-    const pool = all.length ? all : data.destinations.flatMap((d) => d.photos.map((p) => ({ ...p, place: d.name, slug: d.slug })));
-    if (!pool.length) {
-      return render(`<p class="empty">No photos yet — add a folder like <code>photos/Iceland/</code> and push.</p>`);
-    }
-    const n = Math.min(data.site.home?.slideshowCount || 8, pool.length);
-    const picks = pool.sort(() => Math.random() - 0.5).slice(0, n);
-    render(`<a class="slideshow" id="slides" href="#/destinations/${picks[0].slug}">
-      ${picks.map((p, i) => `<div class="slide${i === 0 ? ' on' : ''}" data-slug="${p.slug}" data-place="${esc(p.place)}">
-        <img ${i < 2 ? `src="${p.f}"` : `data-src="${p.f}"`} alt="${esc(p.place)}" draggable="false"></div>`).join('')}
-      <div class="shield"></div><div class="slide-cap" id="slideCap">${esc(picks[0].place)}</div></a>`);
-    const slides = [...main.querySelectorAll('.slide')];
-    let i = 0;
-    slideTimer = setInterval(() => {
-      slides[i].classList.remove('on');
-      i = (i + 1) % slides.length;
-      const s = slides[i], next = slides[(i + 1) % slides.length].querySelector('img');
-      if (next.dataset.src && !next.src) next.src = next.dataset.src;
-      s.classList.add('on');
-      $('#slides').href = `#/destinations/${s.dataset.slug}`;
-      $('#slideCap').textContent = s.dataset.place;
-    }, (data.site.home?.slideSeconds || 5) * 1000);
-  }
+/* ---------- Main ---------- */
+.main {
+  margin-left: var(--sidebar);
+  padding: 56px 48px 80px 8px;
+  min-height: 100vh;
+}
+.view { animation: fade .5s ease both; }
+@keyframes fade { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
 
-  function viewDestinations() {
-    render(`<div class="page-head"><h1 class="page-title">Destinations</h1></div>
-      <div class="dest-grid">${data.destinations.map((d) => `
-        <a class="dest-card" href="#/destinations/${d.slug}">
-          <div class="frame"><img class="lazy" data-src="${d.cover.t}" alt="${esc(d.name)}" draggable="false"></div>
-          <div class="label">${esc(d.name)} <span>${d.photos.length}</span></div>
-        </a>`).join('')}</div>`, 'Destinations');
-  }
+.page-head { margin: 0 0 28px; display: flex; align-items: baseline; gap: 16px; }
+.page-title {
+  margin: 0; font: 300 32px/1.1 var(--serif); letter-spacing: -.01em;
+}
+.page-meta { font-size: 11px; letter-spacing: .2em; text-transform: uppercase; color: var(--muted); }
 
-  function viewDestination(slug) {
-    const idx = data.destinations.findIndex((d) => d.slug === slug);
-    if (idx < 0) return viewDestinations();
-    const d = data.destinations[idx];
-    const prev = data.destinations[idx - 1], next = data.destinations[idx + 1];
-    render(`<div class="page-head"><h1 class="page-title">${esc(d.name)}</h1>
-        <span class="page-meta">${d.photos.length} photographs</span></div>
-      <div class="grid">${d.photos.map((p, i) => `<a class="tile" href="#" data-i="${i}" data-ar="${(p.w / p.h).toFixed(4)}">
-          <img class="lazy" data-src="${p.t}" alt="${esc(d.name)} ${i + 1}" draggable="false"></a>`).join('')}</div>
-      <nav class="pager">
-        ${prev ? `<a href="#/destinations/${prev.slug}">← ${esc(prev.name)}</a>` : '<span></span>'}
-        ${next ? `<a href="#/destinations/${next.slug}">${esc(next.name)} →</a>` : '<span></span>'}
-      </nav>`, d.name);
-    justify();
-    lastW = 0; ro?.observe(main.querySelector('.grid'));
-    main.querySelector('.grid').addEventListener('click', (e) => {
-      const t = e.target.closest('.tile');
-      if (!t) return;
-      e.preventDefault();
-      openLightbox(d.photos, +t.dataset.i);
-    });
-  }
+/* Home slideshow */
+.slideshow {
+  display: block;
+  position: relative;
+  height: calc(100vh - 112px); min-height: 360px;
+  overflow: hidden; background: #f4f4f2;
+}
+.slideshow .slide {
+  position: absolute; inset: 0;
+  opacity: 0; transition: opacity 1.4s ease;
+}
+.slideshow .slide.on { opacity: 1; }
+.slideshow img { width: 100%; height: 100%; object-fit: cover; object-position: right bottom; }
+.slide-cap {
+  position: absolute; left: 24px; bottom: 20px; z-index: 3;
+  color: #fff; font-size: 11px; letter-spacing: .22em; text-transform: uppercase;
+  text-shadow: 0 1px 8px rgba(0,0,0,.35);
+}
+/* Copyright overlay: only shown on phones, where the crop hides the baked-in watermark */
+.slide-wm {
+  display: none;
+  position: absolute; right: 16px; bottom: 20px; z-index: 3;
+  color: #fff; opacity: .7; font-size: 11px; letter-spacing: .12em;
+  text-shadow: 0 1px 8px rgba(0,0,0,.35);
+}
 
-  // Justified rows: every row fills the width, photos keep their shape and your file order.
-  function justify() {
-    const grid = main.querySelector('.grid');
-    if (!grid) return;
-    const css = getComputedStyle(document.documentElement);
-    const target = parseFloat(css.getPropertyValue('--row')) || 340;
-    const gap = parseFloat(css.getPropertyValue('--gap')) || 12;
-    const W = grid.clientWidth;
-    const tiles = [...grid.children];
-    let row = [], sum = 0;
-    const place = (items, h) => items.forEach((t) => { t.style.width = `${Math.floor(+t.dataset.ar * h)}px`; t.style.height = `${Math.round(h)}px`; });
-    for (const t of tiles) {
-      row.push(t); sum += +t.dataset.ar;
-      const h = (W - gap * (row.length - 1)) / sum;
-      if (h <= target) { place(row, h); row = []; sum = 0; }
-    }
-    if (row.length) place(row, Math.min(target, (W - gap * (row.length - 1)) / sum));
-  }
-  // Re-flow whenever the grid's width changes (window resize, scrollbar appearing, etc.)
-  let lastW = 0;
-  const ro = 'ResizeObserver' in window ? new ResizeObserver((es) => {
-    const w = Math.round(es[0].contentRect.width);
-    if (w !== lastW) { lastW = w; justify(); }
-  }) : null;
+/* Destinations index */
+.dest-grid {
+  display: grid; gap: 40px 24px;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+}
+.dest-card { display: block; }
+.dest-card .frame {
+  position: relative; aspect-ratio: 4 / 5; overflow: hidden; background: #f4f4f2;
+}
+.dest-card img { width: 100%; height: 100%; object-fit: cover; transition: transform 1.2s ease, opacity .6s; }
+.dest-card:hover img { transform: scale(1.035); }
+.dest-card .label {
+  margin-top: 14px; display: flex; justify-content: space-between; align-items: baseline;
+  font-size: 12px; letter-spacing: .2em; text-transform: uppercase;
+}
+.dest-card .label span { color: var(--muted); font-size: 11px; letter-spacing: .1em; }
 
-  function viewAbout() {
-    const paras = (data.site.about || '').split(/\n\s*\n/).map((p) => `<p>${esc(p)}</p>`).join('');
-    render(`<div class="page-head"><h1 class="page-title">About</h1></div><div class="prose">${paras}</div>`, 'About');
-  }
-  function viewContact() {
-    const e = data.site.email;
-    render(`<div class="page-head"><h1 class="page-title">Contact</h1></div><div class="prose">
-      <p>For prints, licensing or commissions, get in touch.</p>
-      ${e ? `<p><a href="mailto:${esc(e)}">${esc(e)}</a></p>` : ''}</div>`, 'Contact');
-  }
+/* Justified photo grid — keeps your file order, no cropping surprises */
+.grid { display: flex; flex-wrap: wrap; gap: var(--gap); }
+.tile {
+  position: relative; display: block; overflow: hidden;
+  background: #f4f4f2; cursor: zoom-in;
+}
+.tile img {
+  position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover;
+  transition: opacity .6s ease, transform 1s ease;
+}
+.tile:hover img { transform: scale(1.02); }
 
-  /* ---------- Router (hash routes work on GitHub Pages with no config) ---------- */
-  function route() {
-    closeLightbox(true);
-    const [, section, slug] = (location.hash.replace(/^#\/?/, '#/') || '#/').split('/');
-    if (section === 'destinations' && slug) { markActive('destinations', slug); viewDestination(slug); }
-    else if (section === 'destinations') { markActive('destinations'); viewDestinations(); }
-    else if (section === 'about') { markActive('about'); viewAbout(); }
-    else if (section === 'contact') { markActive('contact'); viewContact(); }
-    else { markActive(null); viewHome(); }
-  }
+img.lazy { opacity: 0; }
+img.loaded { opacity: 1; }
 
-  /* ---------- Lightbox ---------- */
-  const lb = $('#lightbox'), lbImg = $('#lbImg');
-  let lbList = [], lbIdx = 0;
-  function show(i) {
-    lbIdx = (i + lbList.length) % lbList.length;
-    const p = lbList[lbIdx];
-    lbImg.style.opacity = 0;
-    const pre = new Image();
-    pre.onload = () => { lbImg.src = p.f; lbImg.style.opacity = 1; };
-    pre.src = p.f;
-    $('#lbCount').textContent = `${lbIdx + 1} / ${lbList.length}`;
-    [1, -1].forEach((o) => { new Image().src = lbList[(lbIdx + o + lbList.length) % lbList.length].f; });
-  }
-  function openLightbox(list, i) {
-    lbList = list; lb.hidden = false; document.body.style.overflow = 'hidden';
-    requestAnimationFrame(() => lb.classList.add('show'));
-    show(i);
-  }
-  function closeLightbox(instant) {
-    if (lb.hidden) return;
-    lb.classList.remove('show'); document.body.style.overflow = '';
-    if (instant) { lb.hidden = true; lbImg.removeAttribute('src'); }
-    else setTimeout(() => { lb.hidden = true; lbImg.removeAttribute('src'); }, 300);
-  }
-  $('#lbClose').onclick = () => closeLightbox();
-  $('#lbPrev').onclick = () => show(lbIdx - 1);
-  $('#lbNext').onclick = () => show(lbIdx + 1);
-  $('#lbStage').onclick = () => show(lbIdx + 1);
-  lb.addEventListener('click', (e) => { if (e.target === lb) closeLightbox(); });
-  document.addEventListener('keydown', (e) => {
-    if (lb.hidden) return;
-    if (e.key === 'Escape') closeLightbox();
-    if (e.key === 'ArrowRight') show(lbIdx + 1);
-    if (e.key === 'ArrowLeft') show(lbIdx - 1);
-  });
-  let tx = null;
-  lb.addEventListener('touchstart', (e) => { tx = e.touches[0].clientX; }, { passive: true });
-  lb.addEventListener('touchend', (e) => {
-    if (tx === null) return;
-    const dx = e.changedTouches[0].clientX - tx; tx = null;
-    if (Math.abs(dx) > 40) show(lbIdx + (dx < 0 ? 1 : -1));
-  });
+.pager {
+  display: flex; justify-content: space-between; margin-top: 56px; padding-top: 24px;
+  border-top: 1px solid var(--line);
+  font-size: 12px; letter-spacing: .2em; text-transform: uppercase;
+}
+.pager a { color: var(--muted); transition: color .2s; }
+.pager a:hover { color: var(--ink); }
 
-  /* ---------- Boot ---------- */
-  fetch('data.json', { cache: 'no-cache' }).then((r) => r.json()).then((d) => {
-    data = d; buildNav(); route();
-    window.addEventListener('hashchange', route);
-  }).catch(() => { main.innerHTML = '<p class="empty">Could not load photos. Run <code>npm run build</code>.</p>'; });
-})();
+.prose { max-width: 560px; font-size: 16px; line-height: 1.8; }
+.prose p { margin: 0 0 1.2em; }
+.prose a { border-bottom: 1px solid var(--line); transition: border-color .2s; }
+.prose a:hover { border-color: var(--ink); }
+.empty { color: var(--muted); }
+
+/* ---------- Download protection ---------- */
+/* Images ignore the pointer, so right-click / long-press lands on the frame
+   instead of the <img>. No "Save image" option appears. */
+.tile img, .dest-card img, .slideshow img, .lightbox img {
+  pointer-events: none;
+  -webkit-user-drag: none; user-select: none; -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+.shield { position: absolute; inset: 0; z-index: 2; }
+@media print { img { display: none !important; } }
+
+/* ---------- Lightbox ---------- */
+.lightbox {
+  position: fixed; inset: 0; z-index: 100;
+  background: rgba(255,255,255,.985);
+  display: flex; align-items: center; justify-content: center;
+  opacity: 0; transition: opacity .3s ease;
+}
+.lightbox.show { opacity: 1; }
+.lightbox[hidden] { display: none; }
+.lb-stage { position: relative; max-width: calc(100vw - 180px); max-height: calc(100vh - 110px); }
+.lb-stage img {
+  display: block; max-width: calc(100vw - 180px); max-height: calc(100vh - 110px);
+  width: auto; height: auto; transition: opacity .35s ease;
+}
+.lb-btn { position: absolute; width: 48px; height: 48px; display: grid; place-items: center; opacity: .55; transition: opacity .2s; }
+.lb-btn:hover { opacity: 1; }
+.lb-btn svg { width: 22px; height: 22px; fill: none; stroke: var(--ink); stroke-width: 1.2; }
+.lb-close { top: 18px; right: 18px; }
+.lb-prev { left: 18px; top: 50%; transform: translateY(-50%); }
+.lb-next { right: 18px; top: 50%; transform: translateY(-50%); }
+.lb-count {
+  position: absolute; bottom: 22px; left: 0; right: 0; text-align: center;
+  font-size: 11px; letter-spacing: .22em; color: var(--muted);
+}
+
+/* ---------- Tablet / phone ---------- */
+@media (max-width: 1100px) { :root { --row: 320px; --sidebar: 240px; } .sidebar { padding-left: 32px; padding-right: 28px; } }
+
+@media (max-width: 760px) {
+  :root { --row: 260px; --gap: 8px; }
+  .sidebar {
+    position: sticky; top: 0; width: auto; height: auto; bottom: auto;
+    padding: 18px 16px; border-bottom: 1px solid var(--line);
+    overflow: visible;
+  }
+  .brand { display: flex; align-items: center; justify-content: space-between; }
+  .brand-name { font-size: 16px; }
+  .menu-btn { display: grid; gap: 6px; width: 28px; height: 28px; align-content: center; }
+  .menu-btn span { display: block; height: 1px; background: var(--ink); transition: transform .3s; }
+  .menu-btn[aria-expanded="true"] span:first-child { transform: translateY(3.5px) rotate(45deg); }
+  .menu-btn[aria-expanded="true"] span:last-child { transform: translateY(-3.5px) rotate(-45deg); }
+  .nav {
+    display: none; margin-top: 0;
+    position: absolute; left: 0; right: 0; top: 100%;
+    background: var(--bg); padding: 24px 16px 28px;
+    border-bottom: 1px solid var(--line);
+    max-height: calc(100vh - 64px); overflow-y: auto;
+  }
+  .sidebar.menu-open .nav { display: flex; }
+  .copyright { padding-top: 16px; }
+  .main { margin-left: 0; padding: 24px 16px 56px; }
+  .page-title { font-size: 28px; }
+  .slideshow { height: calc(100vh - 150px); }
+  .slideshow img { object-position: center; }
+  .slide-wm { display: block; }
+  .slide-cap { left: 16px; }
+  .dest-grid { grid-template-columns: 1fr 1fr; gap: 28px 12px; }
+  .lb-stage, .lb-stage img { max-width: 100vw; max-height: calc(100vh - 120px); }
+  .lb-prev, .lb-next { top: auto; bottom: 8px; transform: none; }
+  .lb-prev { left: 8px; } .lb-next { right: 8px; }
+}
+
+/* Instagram icon */
+.social { margin-top: 10px; }
+.social a { display: inline-flex; opacity: .8; transition: opacity .2s; }
+.social a:hover { opacity: 1; }
+.social svg { width: 18px; height: 18px; fill: none; stroke: var(--ink); stroke-width: 1.4; }
+.social .dot { fill: var(--ink); stroke: none; }
