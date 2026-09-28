@@ -93,6 +93,10 @@ a, button { -webkit-tap-highlight-color: transparent; }
   display: block;
   position: relative;
   height: calc(100vh - 112px); min-height: 360px;
+  /* Never wider than 2:1 — on ultrawide screens the photo would otherwise be
+     zoomed way in (cropping most of it and blowing up the watermark) */
+  max-width: calc(max(100vh - 112px, 360px) * 2);
+  margin: 0 auto;
   overflow: hidden; background: var(--tile);
 }
 .slideshow .slide {
@@ -262,7 +266,7 @@ img.loaded { opacity: 1; }
 
   .main { margin-left: 0; padding: 24px 16px 56px; }
   .page-title { font-size: 28px; }
-  .slideshow { height: calc(100vh - 150px); }
+  .slideshow { height: calc(100vh - 150px); max-width: none; }
   .slideshow img { object-position: center; }
   .slide-wm { display: block; }
   .slide-cap { left: 16px; }
