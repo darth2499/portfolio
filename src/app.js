@@ -111,7 +111,7 @@
     if (idx < 0) return viewDestinations();
     const d = data.destinations[idx];
     const prev = data.destinations[idx - 1], next = data.destinations[idx + 1];
-    render(`<div class="page-head"><h1 class="page-title">${esc(d.name)}</h1>
+    render(`<div class="page-head"><h1 class="page-title country">${esc(d.name)}</h1>
         <span class="page-meta">${d.photos.length} photographs</span></div>
       <div class="grid">${d.photos.map((p, i) => `<a class="tile" href="#" data-i="${i}" data-ar="${(p.w / p.h).toFixed(4)}">
           <img class="lazy" data-src="${p.t}" alt="${esc(d.name)} ${i + 1}" draggable="false"></a>`).join('')}</div>
