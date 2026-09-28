@@ -74,3 +74,67 @@ async function pool(items, limit, fn) {
   const out = new Array(items.length);
   let i = 0;
   await Promise.all(Array.from({ length: limit }, async () => {
+    while (i < items.length) { const n = i++; out[n] = await fn(items[n], n); }
+  }));
+  return out;
+}
+
+async function main() {
+  const t0 = Date.now();
+  await fs.mkdir(CACHE, { recursive: true });
+  await fs.rm(DIST, { recursive: true, force: true });
+  await fs.mkdir(path.join(DIST, 'img'), { recursive: true });
+
+  const folders = (await fs.readdir(PHOTOS, { withFileTypes: true }))
+    .filter((d) => d.isDirectory() && !/^[._]/.test(d.name))
+    .map((d) => d.name).sort(natural);
+
+  const destinations = [];
+  let total = 0;
+  for (const folder of folders) {
+    const files = (await fs.readdir(path.join(PHOTOS, folder)))
+      .filter((f) => IMAGE_RE.test(f) && !f.startsWith('.')).sort(natural);
+    if (!files.length) continue;
+
+    const name = displayName(folder);
+    const slug = slugify(name);
+    const outDir = path.join(DIST, 'img', slug);
+    await fs.mkdir(outDir, { recursive: true });
+
+    const photos = await pool(files, 4, async (f) => {
+      const p = await processPhoto(path.join(PHOTOS, folder, f));
+      for (const v of ['f', 't']) {
+        await fs.copyFile(path.join(CACHE, `${p.hash}-${v}.webp`), path.join(outDir, `${p.hash}-${v}.webp`));
+      }
+      return { f: `img/${slug}/${p.hash}-f.webp`, t: `img/${slug}/${p.hash}-t.webp`, w: p.w, h: p.h, cover: /^_?cover/i.test(f) };
+    });
+
+    const coverIdx = Math.max(0, photos.findIndex((p) => p.cover));
+    const cover = photos[coverIdx];
+    destinations.push({ name, slug, cover: { t: cover.t, w: cover.w, h: cover.h }, photos: photos.map(({ cover, ...p }) => p) });
+    total += photos.length;
+    console.log(`  ${name.padEnd(24)} ${photos.length} photo${photos.length === 1 ? '' : 's'}`);
+  }
+
+  const site = {
+    name: config.name, tagline: config.tagline, about: config.about,
+    email: config.email, instagram: config.instagram, home: config.home,
+  };
+  await fs.writeFile(path.join(DIST, 'data.json'), JSON.stringify({ site, destinations }));
+
+  for (const f of await fs.readdir(SRC)) {
+    let body = await fs.readFile(path.join(SRC, f));
+    if (f === 'index.html') {
+      body = body.toString()
+        .replaceAll('{{NAME}}', esc(config.name))
+        .replaceAll('{{DESCRIPTION}}', esc(config.description || ''));
+    }
+    await fs.writeFile(path.join(DIST, f), body);
+  }
+  await fs.writeFile(path.join(DIST, '.nojekyll'), '');
+  if (config.cname) await fs.writeFile(path.join(DIST, 'CNAME'), config.cname.trim() + '\n');
+
+  console.log(`\nBuilt ${destinations.length} destinations, ${total} photos in ${((Date.now() - t0) / 1000).toFixed(1)}s → dist/`);
+}
+
+main().catch((e) => { console.error(e); process.exit(1); });
