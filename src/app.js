@@ -51,9 +51,9 @@
   }
   $('#destToggle').addEventListener('click', () => {
     if (isPhone()) { setMenu(false); location.hash = '#/destinations'; return; }
-    const open = !$('#destFolder').classList.contains('open');
-    setFolder(open);
-    if (open && !location.hash.startsWith('#/destinations')) location.hash = '#/destinations';
+    // Opens the list (it stays open until the page is reloaded) and goes to the Destinations page
+    setFolder(true);
+    location.hash = '#/destinations';
   });
   $('#menuBtn').addEventListener('click', () => setMenu(!$('#sidebar').classList.contains('menu-open')));
   $('#nav').addEventListener('click', (e) => { if (e.target.closest('a')) setMenu(false); });
