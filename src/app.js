@@ -111,6 +111,34 @@
           <div class="frame"><img class="lazy" data-src="${d.cover.t}" alt="${esc(d.name)}" draggable="false"></div>
           <div class="label">${esc(d.name)} <span>${d.photos.length}</span></div>
         </a>`).join('')}</div>`, 'Destinations');
+    scatterIn([...main.querySelectorAll('.dest-card')]);
+  }
+
+  // Prints drop in from above, land scattered on the "table", then slide into the grid
+  function scatterIn(cards) {
+    if (!cards.length || !Element.prototype.animate || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    const rnd = (a, b) => a + Math.random() * (b - a);
+    const grid = cards[0].parentElement.getBoundingClientRect();
+    const vh = innerHeight;
+    const cx = grid.left + grid.width / 2;
+    const cy = (Math.max(grid.top, 0) + Math.min(grid.bottom, vh)) / 2; // centre of the visible table
+    const rects = cards.map((c) => c.getBoundingClientRect());
+    cards.forEach((card, i) => {
+      const r = rects[i];
+      const mx = r.left + r.width / 2, my = r.top + r.height / 2;
+      const sx = (cx - mx) * rnd(0.45, 0.8) + rnd(-70, 70);   // scattered resting spot
+      const sy = (cy - my) * rnd(0.45, 0.8) + rnd(-40, 40);
+      const startY = -r.bottom - rnd(80, 260);                // fully above the screen
+      const rot0 = rnd(-40, 40), rot1 = rnd(-16, 16);
+      card.classList.add('flying');
+      const anim = card.animate([
+        { transform: `translate(${sx + rnd(-140, 140)}px, ${startY}px) rotate(${rot0}deg) scale(1.15)`, offset: 0, easing: 'cubic-bezier(.35,0,.65,1)' },
+        { transform: `translate(${sx}px, ${sy}px) rotate(${rot1}deg) scale(1)`, offset: 0.42, easing: 'linear' },
+        { transform: `translate(${sx}px, ${sy}px) rotate(${rot1}deg) scale(1)`, offset: 0.55, easing: 'cubic-bezier(.55,0,.15,1)' },
+        { transform: 'none', offset: 1 },
+      ], { duration: 1800, delay: Math.min(i * 90, 900), fill: 'backwards' });
+      anim.finished.then(() => card.classList.remove('flying')).catch(() => {});
+    });
   }
 
   function viewDestination(slug) {
