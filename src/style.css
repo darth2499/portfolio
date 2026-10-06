@@ -178,10 +178,13 @@ body.is-gallery .main { padding: 0; }
   grid-area: stage; position: relative; min-height: 0;
   padding: 40px 24px 40px 8px; cursor: zoom-in; touch-action: none;
 }
-.gal-photo { position: relative; width: 100%; height: 100%; }
+.gal-photo {
+  position: relative; width: 100%; height: 100%;
+  background: center / contain no-repeat;   /* blurry instant preview */
+}
 .gal-photo img {
   position: absolute; inset: 0; width: 100%; height: 100%;
-  object-fit: contain; opacity: 0; transition: opacity .45s ease;
+  object-fit: contain; opacity: 0; transition: opacity .35s ease;
 }
 .gal-photo img.show { opacity: 1; }
 .gal-stage .shield { inset: 40px 24px 40px 8px; }
@@ -193,8 +196,9 @@ body.is-gallery .main { padding: 0; }
 .gal-track { position: absolute; left: 50%; top: 50%; will-change: transform; }
 .gal-thumb {
   position: absolute; left: 0; top: 0;
-  width: 66px; height: 44px; padding: 0; overflow: hidden; background: var(--tile);
-  transition: opacity .3s;
+  width: 66px; height: 44px; padding: 0; overflow: hidden;
+  background: var(--tile) center / cover no-repeat;   /* blurry preview until the thumb loads */
+  transition: opacity .3s; contain: strict;
 }
 .gal-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; pointer-events: none; -webkit-user-drag: none; -webkit-touch-callout: none; }
 .gal-thumb.on { opacity: .45; }

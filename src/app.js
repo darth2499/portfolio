@@ -149,12 +149,12 @@
         <div class="gal-head"><h1 class="page-title country">${esc(d.name)}</h1>
           <span class="page-meta" id="galCount">1 / ${d.photos.length}</span></div>
         <div class="gal-stage" id="galStage">
-          <div class="gal-photo"><img alt="" draggable="false"><img alt="" draggable="false"></div>
+          <div class="gal-photo" id="galPhoto"><img alt="" draggable="false" decoding="async"><img alt="" draggable="false" decoding="async"></div>
           <div class="shield"></div>
         </div>
         <div class="gal-strip" id="galStrip">
           <div class="gal-track" id="galTrack">${d.photos.map((p, i) => `
-            <button class="gal-thumb" data-i="${i}" aria-label="Photo ${i + 1}"><img src="${p.t}" alt="" draggable="false" loading="${i < 14 ? 'eager' : 'lazy'}"></button>`).join('')}
+            <button class="gal-thumb" data-i="${i}" aria-label="Photo ${i + 1}" style="background-image:url(${p.q})"><img src="${p.s}" alt="" draggable="false" decoding="async"></button>`).join('')}
           </div>
           <div class="gal-frame"></div>
         </div>
@@ -192,32 +192,46 @@
       const i = Math.round(pos / step);
       if (i !== cur) setCurrent(i);
     }
-    function loop() {
-      if (!drag) pos += (target - pos) * 0.09;          // ease toward the target = smooth glide
+    let last = 0;
+    function loop(now) {
+      // Frame-rate independent easing (same feel on 60Hz and 120Hz screens)
+      const dt = last ? Math.min(64, now - last) : 16.7; last = now;
+      if (!drag) pos += (target - pos) * (1 - Math.pow(1 - 0.1, dt / 16.7));
       if (Math.abs(target - pos) < 0.2 && !drag) pos = target;
       paint();
-      raf = (pos !== target || drag) ? requestAnimationFrame(loop) : 0;
+      if (pos !== target || drag) raf = requestAnimationFrame(loop);
+      else { raf = 0; last = 0; }
     }
     function kick() { if (!raf) raf = requestAnimationFrame(loop); }
 
+    // Big photo: instant blurry preview while scrolling, sharp photo once you stop.
+    // (Loading full-size photos for every photo you scroll past is what made it laggy.)
+    const holder = $('#galPhoto');
+    let token = 0, loadTimer = 0;
+    async function reveal(src, my) {
+      const back = layers[1 - front];
+      back.src = src;
+      try { await back.decode(); } catch (e) { return; }   // decode off the main thread
+      if (my !== token) return;
+      back.classList.add('show'); layers[front].classList.remove('show'); front = 1 - front;
+    }
     function setCurrent(i) {
+      const prev = cur;
       cur = Math.max(0, Math.min(n - 1, i));
       $('#galCount').textContent = `${cur + 1} / ${n}`;
-      thumbs.forEach((t, k) => t.classList.toggle('on', k === cur));
-      const p = photos[cur];
-      // Show the (already loaded) thumbnail instantly, then swap in the full-size photo
-      const back = layers[1 - front];
-      back.onload = () => {
-        back.onload = null;
-        if (photos[cur] !== p) return;
-        back.classList.add('show'); layers[front].classList.remove('show'); front = 1 - front;
-        const full = new Image();
-        full.onload = () => { if (photos[cur] === p && back.dataset.f !== p.f) { back.src = p.f; back.dataset.f = p.f; } };
-        full.src = p.f;
-      };
-      back.dataset.f = '';
-      back.src = p.t;
-      [1, -1].forEach((o) => { const q = photos[cur + o]; if (q) new Image().src = q.f; });
+      thumbs[prev]?.classList.remove('on'); thumbs[cur].classList.add('on');
+      const p = photos[cur], my = ++token;
+      holder.style.backgroundImage = `url(${p.s}), url(${p.q})`; // strip thumb if loaded, else the blur
+      layers[front].classList.remove('show');
+      clearTimeout(loadTimer);
+      loadTimer = setTimeout(async () => {
+        if (my !== token) return;
+        await reveal(p.t, my);                 // medium size first (fast on slow connections)
+        if (my !== token) return;
+        await reveal(p.f, my);                 // then the full-size photo
+        if (my !== token) return;
+        [1, -1].forEach((o) => { const q = photos[cur + o]; if (q) new Image().src = q.t; });
+      }, 110);
     }
 
     // Mouse wheel / trackpad: anywhere on the page
