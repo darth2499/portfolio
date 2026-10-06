@@ -149,7 +149,7 @@
         <div class="gal-head"><h1 class="page-title country">${esc(d.name)}</h1>
           <span class="page-meta" id="galCount">1 / ${d.photos.length}</span></div>
         <div class="gal-stage" id="galStage">
-          <div class="gal-photo" id="galPhoto"><img alt="" draggable="false" decoding="async"><img alt="" draggable="false" decoding="async"></div>
+          <div class="gal-photo" id="galPhoto">${'<div class="gal-pic"><img class="lo" alt="" draggable="false"><img class="hi" alt="" draggable="false"></div>'.repeat(2)}</div>
           <div class="shield"></div>
         </div>
         <div class="gal-strip" id="galStrip">
@@ -169,8 +169,6 @@
     const n = photos.length;
     const stage = $('#galStage'), strip = $('#galStrip'), track = $('#galTrack');
     const thumbs = [...track.children];
-    const layers = [...stage.querySelectorAll('.gal-photo img')];
-    let front = 0;
     let horiz = false, step = 70;
     let pos = 0, target = 0, cur = -1, raf = 0, snapTimer = 0;
     let drag = null, moved = false, downThumb = null;
@@ -204,34 +202,83 @@
     }
     function kick() { if (!raf) raf = requestAnimationFrame(loop); }
 
-    // Big photo: instant blurry preview while scrolling, sharp photo once you stop.
-    // (Loading full-size photos for every photo you scroll past is what made it laggy.)
-    const holder = $('#galPhoto');
-    let token = 0, loadTimer = 0;
-    async function reveal(src, my) {
-      const back = layers[1 - front];
-      back.src = src;
-      try { await back.decode(); } catch (e) { return; }   // decode off the main thread
-      if (my !== token) return;
-      back.classList.add('show'); layers[front].classList.remove('show'); front = 1 - front;
+    /* Big photo — progressive and seamless:
+       - land on a photo: show the sharpest version already in memory, straight away
+       - once you stop: the sharper version fades in slowly ON TOP of the softer one
+         (the softer one stays underneath, so there's never a dip or a jump)
+       - meanwhile the neighbours are quietly preloaded, so the next photo is usually
+         already sharp by the time you get to it */
+    const pics = [...$('#galPhoto').children];
+    let showing = null, token = 0, settleTimer = 0, hideTimer = 0;
+    const done = new Set(), pending = new Map();
+    function load(src) {                       // download + decode once, remember it
+      if (done.has(src)) return Promise.resolve(true);
+      if (!pending.has(src)) {
+        const im = new Image(); im.decoding = 'async'; im.src = src;
+        pending.set(src, im.decode().then(() => { done.add(src); return true; }, () => { pending.delete(src); return false; }));
+      }
+      return pending.get(src);
     }
+    thumbs.forEach((t, k) => {                 // strip thumbnails count as "in memory" once loaded
+      const im = t.firstElementChild, mark = () => done.add(photos[k].s);
+      if (im.complete && im.naturalWidth) mark(); else im.addEventListener('load', mark, { once: true });
+    });
+    const best = (p) => [p.f, p.t, p.s].find((src) => done.has(src));
+    const nextFrame = () => new Promise((r) => requestAnimationFrame(() => r()));
+
+    async function sharpen(pic, src, my) {     // fade a sharper version in over the current one
+      const lo = pic.children[0], hi = pic.children[1];
+      if (hi.classList.contains('in')) {       // move what's showing down a layer first
+        lo.src = hi.src; try { await lo.decode(); } catch (e) {}
+        if (my !== token) return;
+        hi.classList.add('instant'); hi.classList.remove('in');
+      }
+      hi.src = src; try { await hi.decode(); } catch (e) { return; }
+      if (my !== token) return;
+      await nextFrame();
+      hi.classList.remove('instant'); hi.classList.add('in');
+    }
+
     function setCurrent(i) {
       const prev = cur;
       cur = Math.max(0, Math.min(n - 1, i));
       $('#galCount').textContent = `${cur + 1} / ${n}`;
       thumbs[prev]?.classList.remove('on'); thumbs[cur].classList.add('on');
       const p = photos[cur], my = ++token;
-      holder.style.backgroundImage = `url(${p.s}), url(${p.q})`; // strip thumb if loaded, else the blur
-      layers[front].classList.remove('show');
-      clearTimeout(loadTimer);
-      loadTimer = setTimeout(async () => {
+      const pic = pics[0] === showing ? pics[1] : pics[0], old = showing;
+      const lo = pic.children[0], hi = pic.children[1];
+      pic.style.backgroundImage = `url(${p.q})`;
+      hi.classList.add('instant'); hi.classList.remove('in'); hi.removeAttribute('src');
+      const have = best(p);
+      if (have) lo.src = have; else lo.removeAttribute('src');
+      const show = () => {
         if (my !== token) return;
-        await reveal(p.t, my);                 // medium size first (fast on slow connections)
+        // New photo fades in on top; the old one stays solid underneath until it's covered
+        pic.style.zIndex = 2; if (old) old.style.zIndex = 1;
+        pic.classList.add('show'); showing = pic;
+        clearTimeout(hideTimer);
+        hideTimer = setTimeout(() => pics.forEach((o) => o !== showing && o.classList.remove('show')), 400);
+      };
+      if (have) lo.decode().then(show, show); else show();
+
+      clearTimeout(settleTimer);
+      settleTimer = setTimeout(async () => {   // only fetch big files once scrolling settles
         if (my !== token) return;
-        await reveal(p.f, my);                 // then the full-size photo
-        if (my !== token) return;
-        [1, -1].forEach((o) => { const q = photos[cur + o]; if (q) new Image().src = q.t; });
-      }, 110);
+        if (have !== p.f) {
+          if (have !== p.t && !done.has(p.f)) {
+            const okT = await load(p.t);           // medium size first (fast even on slow connections)
+            if (my !== token) return;
+            if (okT && !done.has(p.f) && done.has(p.t)) await sharpen(pic, p.t, my);
+          }
+          if (await load(p.f) && my === token) await sharpen(pic, p.f, my);
+        }
+        // Preload neighbours one at a time (never clogs the connection)
+        for (const o of [1, -1, 2, -2, 3]) {
+          const q = photos[cur + o];
+          if (my !== token) return;
+          if (q) { await load(q.t); if (Math.abs(o) <= 2 && my === token) await load(q.f); }
+        }
+      }, 90);
     }
 
     // Mouse wheel / trackpad: anywhere on the page

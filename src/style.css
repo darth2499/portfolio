@@ -178,15 +178,19 @@ body.is-gallery .main { padding: 0; }
   grid-area: stage; position: relative; min-height: 0;
   padding: 40px 24px 40px 8px; cursor: zoom-in; touch-action: none;
 }
-.gal-photo {
-  position: relative; width: 100%; height: 100%;
-  background: center / contain no-repeat;   /* blurry instant preview */
+.gal-photo { position: relative; width: 100%; height: 100%; }
+.gal-pic {
+  position: absolute; inset: 0; opacity: 0; transition: opacity .35s ease;
+  background: center / contain no-repeat;   /* tiny blurred preview, only if nothing else is ready */
 }
-.gal-photo img {
-  position: absolute; inset: 0; width: 100%; height: 100%;
-  object-fit: contain; opacity: 0; transition: opacity .35s ease;
+.gal-pic.show { opacity: 1; }
+.gal-pic img {
+  position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain;
 }
-.gal-photo img.show { opacity: 1; }
+.gal-pic img:not([src]) { visibility: hidden; }
+.gal-pic .hi { opacity: 0; transition: opacity .9s cubic-bezier(.4,0,.2,1); }   /* slow, gentle focus-in */
+.gal-pic .hi.in { opacity: 1; }
+.gal-pic .hi.instant { transition: none; }
 .gal-stage .shield { inset: 40px 24px 40px 8px; }
 .gal-strip {
   grid-area: strip; position: relative; overflow: hidden;
@@ -227,7 +231,7 @@ img.loaded { opacity: 1; }
 /* ---------- Download protection ---------- */
 /* Images ignore the pointer, so right-click / long-press lands on the frame
    instead of the <img>. No "Save image" option appears. */
-.tile img, .dest-card img, .slideshow img, .lightbox img {
+.tile img, .dest-card img, .slideshow img, .lightbox img, .gal img {
   pointer-events: none;
   -webkit-user-drag: none; user-select: none; -webkit-user-select: none;
   -webkit-touch-callout: none;
