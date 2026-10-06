@@ -180,7 +180,7 @@
 
     function layout() {
       horiz = isPhone();
-      step = horiz ? 96 : 70;
+      step = horiz ? 48 : 56;
       thumbs.forEach((t, i) => {
         t.style.transform = horiz ? `translate(calc(-50% + ${i * step}px), -50%)` : `translate(-50%, calc(-50% + ${i * step}px))`;
       });
