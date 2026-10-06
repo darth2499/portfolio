@@ -209,7 +209,7 @@
        - meanwhile the neighbours are quietly preloaded, so the next photo is usually
          already sharp by the time you get to it */
     const pics = [...$('#galPhoto').children];
-    let showing = null, token = 0, settleTimer = 0, hideTimer = 0;
+    let showing = null, token = 0, settleTimer = 0, lastSwitch = 0;
     const done = new Set(), pending = new Map();
     function load(src) {                       // download + decode once, remember it
       if (done.has(src)) return Promise.resolve(true);
@@ -253,11 +253,17 @@
       if (have) lo.src = have; else lo.removeAttribute('src');
       const show = () => {
         if (my !== token) return;
-        // New photo fades in on top; the old one stays solid underneath until it's covered
-        pic.style.zIndex = 2; if (old) old.style.zIndex = 1;
-        pic.classList.add('show'); showing = pic;
-        clearTimeout(hideTimer);
-        hideTimer = setTimeout(() => pics.forEach((o) => o !== showing && o.classList.remove('show')), 400);
+        // Scrolling fast: swap instantly (no overlapping portrait/landscape ghosts).
+        // Settled: quick crossfade — the old photo always fades out as the new one fades in.
+        const now = performance.now(), fast = now - lastSwitch < 320;
+        lastSwitch = now;
+        pics.forEach((o) => {
+          if (o === pic) return;
+          o.style.transition = fast ? 'none' : '';
+          o.style.zIndex = 1; o.classList.remove('show');
+        });
+        pic.style.transition = fast ? 'none' : '';
+        pic.style.zIndex = 2; pic.classList.add('show'); showing = pic;
       };
       if (have) lo.decode().then(show, show); else show();
 
