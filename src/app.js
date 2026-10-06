@@ -4,10 +4,11 @@
   const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   let data = { site: {}, destinations: [] };
   let slideTimer = null;
+  let unmount = null; // cleanup for the country gallery (animation loop + listeners)
 
   /* ---------- Download deterrents ---------- */
   // Honest note: nothing stops a screenshot. These stop casual right-click / drag / long-press saves.
-  const guarded = (el) => el.closest && el.closest('.tile, .dest-card, .slideshow, .lightbox');
+  const guarded = (el) => el.closest && el.closest('.gal, .dest-card, .slideshow, .lightbox');
   document.addEventListener('contextmenu', (e) => { if (guarded(e.target)) e.preventDefault(); });
   document.addEventListener('dragstart', (e) => { if (e.target.tagName === 'IMG') e.preventDefault(); });
 
@@ -71,7 +72,7 @@
   /* ---------- Views ---------- */
   function render(html, title) {
     clearInterval(slideTimer);
-    ro?.disconnect();
+    if (unmount) { unmount(); unmount = null; }
     main.innerHTML = `<div class="view">${html}</div>`;
     document.title = title ? `${title} — ${data.site.name}` : `${data.site.name} — Photography`;
     lazy(main);
@@ -142,52 +143,150 @@
   }
 
   function viewDestination(slug) {
-    const idx = data.destinations.findIndex((d) => d.slug === slug);
-    if (idx < 0) return viewDestinations();
-    const d = data.destinations[idx];
-    const prev = data.destinations[idx - 1], next = data.destinations[idx + 1];
-    render(`<div class="page-head"><h1 class="page-title country">${esc(d.name)}</h1>
-        <span class="page-meta">${d.photos.length} photographs</span></div>
-      <div class="grid">${d.photos.map((p, i) => `<a class="tile" href="#" data-i="${i}" data-ar="${(p.w / p.h).toFixed(4)}">
-          <img class="lazy" data-src="${p.t}" alt="${esc(d.name)} ${i + 1}" draggable="false"></a>`).join('')}</div>
-      <nav class="pager">
-        ${prev ? `<a href="#/destinations/${prev.slug}">← ${esc(prev.name)}</a>` : '<span></span>'}
-        ${next ? `<a href="#/destinations/${next.slug}">${esc(next.name)} →</a>` : '<span></span>'}
-      </nav>`, d.name);
-    justify();
-    lastW = 0; ro?.observe(main.querySelector('.grid'));
-    main.querySelector('.grid').addEventListener('click', (e) => {
-      const t = e.target.closest('.tile');
-      if (!t) return;
-      e.preventDefault();
-      openLightbox(d.photos, +t.dataset.i);
-    });
+    const d = data.destinations.find((x) => x.slug === slug);
+    if (!d) return viewDestinations();
+    render(`<div class="gal">
+        <div class="gal-head"><h1 class="page-title country">${esc(d.name)}</h1>
+          <span class="page-meta" id="galCount">1 / ${d.photos.length}</span></div>
+        <div class="gal-stage" id="galStage">
+          <div class="gal-photo"><img alt="" draggable="false"><img alt="" draggable="false"></div>
+          <div class="shield"></div>
+        </div>
+        <div class="gal-strip" id="galStrip">
+          <div class="gal-track" id="galTrack">${d.photos.map((p, i) => `
+            <button class="gal-thumb" data-i="${i}" aria-label="Photo ${i + 1}"><img src="${p.t}" alt="" draggable="false" loading="${i < 14 ? 'eager' : 'lazy'}"></button>`).join('')}
+          </div>
+          <div class="gal-frame"></div>
+        </div>
+      </div>`, d.name);
+    unmount = mountGallery(d.photos);
   }
 
-  // Justified rows: every row fills the width, photos keep their shape and your file order.
-  function justify() {
-    const grid = main.querySelector('.grid');
-    if (!grid) return;
-    const css = getComputedStyle(document.documentElement);
-    const target = parseFloat(css.getPropertyValue('--row')) || 340;
-    const gap = parseFloat(css.getPropertyValue('--gap')) || 12;
-    const W = grid.clientWidth;
-    const tiles = [...grid.children];
-    let row = [], sum = 0;
-    const place = (items, h) => items.forEach((t) => { t.style.width = `${Math.floor(+t.dataset.ar * h)}px`; t.style.height = `${Math.round(h)}px`; });
-    for (const t of tiles) {
-      row.push(t); sum += +t.dataset.ar;
-      const h = (W - gap * (row.length - 1)) / sum;
-      if (h <= target) { place(row, h); row = []; sum = 0; }
+  /* ---------- Country gallery: big photo + momentum-scrolling thumbnail strip ----------
+     Vertical strip on the right (desktop), horizontal strip along the bottom (phone).
+     Scrolling glides and slowly eases to a stop, then settles on the nearest photo. */
+  function mountGallery(photos) {
+    const n = photos.length;
+    const stage = $('#galStage'), strip = $('#galStrip'), track = $('#galTrack');
+    const thumbs = [...track.children];
+    const layers = [...stage.querySelectorAll('.gal-photo img')];
+    let front = 0;
+    let horiz = false, step = 70;
+    let pos = 0, target = 0, cur = -1, raf = 0, snapTimer = 0;
+    let drag = null, moved = false, downThumb = null;
+
+    const clamp = (v) => Math.max(0, Math.min((n - 1) * step, v));
+    const snap = () => { target = clamp(Math.round(target / step) * step); kick(); };
+
+    function layout() {
+      horiz = isPhone();
+      step = horiz ? 96 : 70;
+      thumbs.forEach((t, i) => {
+        t.style.transform = horiz ? `translate(calc(-50% + ${i * step}px), -50%)` : `translate(-50%, calc(-50% + ${i * step}px))`;
+      });
+      pos = target = clamp(Math.max(cur, 0) * step);
+      paint();
     }
-    if (row.length) place(row, Math.min(target, (W - gap * (row.length - 1)) / sum));
+    function paint() {
+      track.style.transform = horiz ? `translate3d(${-pos}px,0,0)` : `translate3d(0,${-pos}px,0)`;
+      const i = Math.round(pos / step);
+      if (i !== cur) setCurrent(i);
+    }
+    function loop() {
+      if (!drag) pos += (target - pos) * 0.09;          // ease toward the target = smooth glide
+      if (Math.abs(target - pos) < 0.2 && !drag) pos = target;
+      paint();
+      raf = (pos !== target || drag) ? requestAnimationFrame(loop) : 0;
+    }
+    function kick() { if (!raf) raf = requestAnimationFrame(loop); }
+
+    function setCurrent(i) {
+      cur = Math.max(0, Math.min(n - 1, i));
+      $('#galCount').textContent = `${cur + 1} / ${n}`;
+      thumbs.forEach((t, k) => t.classList.toggle('on', k === cur));
+      const p = photos[cur];
+      // Show the (already loaded) thumbnail instantly, then swap in the full-size photo
+      const back = layers[1 - front];
+      back.onload = () => {
+        back.onload = null;
+        if (photos[cur] !== p) return;
+        back.classList.add('show'); layers[front].classList.remove('show'); front = 1 - front;
+        const full = new Image();
+        full.onload = () => { if (photos[cur] === p && back.dataset.f !== p.f) { back.src = p.f; back.dataset.f = p.f; } };
+        full.src = p.f;
+      };
+      back.dataset.f = '';
+      back.src = p.t;
+      [1, -1].forEach((o) => { const q = photos[cur + o]; if (q) new Image().src = q.f; });
+    }
+
+    // Mouse wheel / trackpad: anywhere on the page
+    function onWheel(e) {
+      if (!lb.hidden) return;
+      e.preventDefault();
+      let dlt = Math.abs(e.deltaY) >= Math.abs(e.deltaX) ? e.deltaY : e.deltaX;
+      if (e.deltaMode === 1) dlt *= 16;
+      target = clamp(target + dlt * 0.8);
+      kick();
+      clearTimeout(snapTimer); snapTimer = setTimeout(snap, 160);
+    }
+    // Drag / swipe on the strip or the big photo, with flick momentum
+    function onDown(e) {
+      if (e.button > 0) return;
+      drag = { x: e.clientX, y: e.clientY, start: target, last: horiz ? e.clientX : e.clientY, t: performance.now(), v: 0, fromStrip: strip.contains(e.target) };
+      moved = false;
+      downThumb = e.target.closest('.gal-thumb');
+      e.currentTarget.setPointerCapture?.(e.pointerId);
+      kick();
+    }
+    function onMove(e) {
+      if (!drag) return;
+      const p = horiz ? e.clientX : e.clientY;
+      const total = horiz ? drag.x - e.clientX : drag.y - e.clientY;
+      if (Math.abs(total) > 6) moved = true;
+      if (!moved) return;
+      // On the strip the thumbnails follow your finger; on the big photo a swipe moves faster
+      const k = drag.fromStrip ? 1 : step / 90;
+      const now = performance.now(), dt = Math.max(1, now - drag.t);
+      drag.v = 0.8 * ((drag.last - p) * k / dt) + 0.2 * drag.v;
+      drag.last = p; drag.t = now;
+      target = pos = clamp(drag.start + total * k);
+    }
+    function onUp() {
+      if (!drag) return;
+      if (moved) { target = clamp(target + drag.v * 260); snap(); }  // fling, then settle
+      drag = null; kick();
+    }
+    function onKey(e) {
+      if (!lb.hidden) return;
+      if (e.key === 'ArrowDown' || e.key === 'ArrowRight') { target = clamp(target + step); snap(); e.preventDefault(); }
+      if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') { target = clamp(target - step); snap(); e.preventDefault(); }
+    }
+
+    strip.addEventListener('click', () => {
+      const t = downThumb; // (pointer capture retargets the click, so use where the press started)
+      if (!t || moved) return;
+      target = clamp(+t.dataset.i * step); kick();
+    });
+    stage.addEventListener('click', () => { if (!moved) openLightbox(photos, cur); });
+    [strip, stage].forEach((el) => {
+      el.addEventListener('pointerdown', onDown);
+      el.addEventListener('pointermove', onMove);
+      el.addEventListener('pointerup', onUp);
+      el.addEventListener('pointercancel', onUp);
+    });
+    window.addEventListener('wheel', onWheel, { passive: false });
+    window.addEventListener('keydown', onKey);
+    window.addEventListener('resize', layout);
+    layout();
+
+    return () => {
+      cancelAnimationFrame(raf); clearTimeout(snapTimer);
+      window.removeEventListener('wheel', onWheel);
+      window.removeEventListener('keydown', onKey);
+      window.removeEventListener('resize', layout);
+    };
   }
-  // Re-flow whenever the grid's width changes (window resize, scrollbar appearing, etc.)
-  let lastW = 0;
-  const ro = 'ResizeObserver' in window ? new ResizeObserver((es) => {
-    const w = Math.round(es[0].contentRect.width);
-    if (w !== lastW) { lastW = w; justify(); }
-  }) : null;
 
   function viewAbout() {
     const paras = (data.site.about || '').split(/\n\s*\n/).map((p) => `<p>${esc(p)}</p>`).join('');
@@ -206,6 +305,7 @@
     const [, section, slug] = (location.hash.replace(/^#\/?/, '#/') || '#/').split('/');
     // The home page is a single screen: no scrolling
     document.body.classList.toggle('is-home', !['destinations', 'about', 'contact'].includes(section));
+    document.body.classList.toggle('is-gallery', section === 'destinations' && !!slug);
     if (section === 'destinations' && slug) { markActive('destinations', slug); viewDestination(slug); }
     else if (section === 'destinations') { markActive('destinations'); viewDestinations(); }
     else if (section === 'about') { markActive('about'); viewAbout(); }

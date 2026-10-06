@@ -100,16 +100,16 @@ a, button { -webkit-tap-highlight-color: transparent; }
   overflow: hidden; background: var(--tile);
 }
 /* Home page fits the screen exactly — no scrolling */
-body.is-home {
+body.is-home, body.is-gallery {
   height: 100vh; height: 100dvh; overflow: hidden;
   display: flex; flex-direction: column;
 }
-body.is-home .main {
+body.is-home .main, body.is-gallery .main {
   flex: 1; min-height: 0;
   display: flex; flex-direction: column;
   padding-bottom: 56px;
 }
-body.is-home .view { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+body.is-home .view, body.is-gallery .view { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 body.is-home .slideshow { flex: 1; height: auto; min-height: 0; width: 100%; }
 .slideshow .slide {
   position: absolute; inset: 0;
@@ -166,17 +166,42 @@ body.is-home .slideshow { flex: 1; height: auto; min-height: 0; width: 100%; }
 }
 .dest-card .label span { color: var(--muted); font-size: 11px; letter-spacing: .1em; }
 
-/* Justified photo grid — keeps your file order, no cropping surprises */
-.grid { display: flex; flex-wrap: wrap; gap: var(--gap); }
-.tile {
-  position: relative; display: block; overflow: hidden;
-  background: var(--tile); cursor: zoom-in;
+/* Country gallery — big photo + momentum-scrolling thumbnail strip */
+body.is-gallery .main { padding: 0; }
+.gal {
+  flex: 1; min-height: 0;
+  display: grid; grid-template-columns: 1fr 132px; grid-template-rows: auto 1fr;
+  grid-template-areas: "head strip" "stage strip";
 }
-.tile img {
-  position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover;
-  transition: opacity .6s ease, transform 1s ease;
+.gal-head { grid-area: head; display: flex; align-items: baseline; gap: 16px; padding: 56px 0 0 8px; }
+.gal-stage {
+  grid-area: stage; position: relative; min-height: 0;
+  padding: 32px 40px 56px 8px; cursor: zoom-in; touch-action: none;
 }
-.tile:hover img { transform: scale(1.02); }
+.gal-photo { position: relative; width: 100%; height: 100%; }
+.gal-photo img {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  object-fit: contain; opacity: 0; transition: opacity .45s ease;
+}
+.gal-photo img.show { opacity: 1; }
+.gal-stage .shield { inset: 32px 40px 56px 8px; }
+.gal-strip {
+  grid-area: strip; position: relative; overflow: hidden;
+  touch-action: none; cursor: grab; user-select: none;
+}
+.gal-strip:active { cursor: grabbing; }
+.gal-track { position: absolute; left: 50%; top: 50%; will-change: transform; }
+.gal-thumb {
+  position: absolute; left: 0; top: 0;
+  width: 84px; height: 56px; padding: 0; overflow: hidden; background: var(--tile);
+  transition: opacity .3s;
+}
+.gal-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; pointer-events: none; -webkit-user-drag: none; -webkit-touch-callout: none; }
+.gal-thumb.on { opacity: .45; }
+.gal-frame {
+  position: absolute; left: 50%; top: 50%; width: 98px; height: 70px;
+  transform: translate(-50%, -50%); border: 1px solid rgba(0,0,0,.4); pointer-events: none;
+}
 
 img.lazy { opacity: 0; }
 img.loaded { opacity: 1; }
@@ -299,6 +324,15 @@ img.loaded { opacity: 1; }
   .page-title { font-size: 28px; }
   .slideshow { height: calc(100vh - 150px); max-width: none; }
   body.is-home .main { padding-bottom: 16px; }
+  body.is-gallery .main { padding: 0; }
+  .gal { grid-template-columns: 1fr; grid-template-rows: 1fr 150px auto; grid-template-areas: "stage" "strip" "head"; }
+  .gal-head { justify-content: center; padding: 16px 16px 20px; }
+  .gal-head .page-title { font-size: 22px; }
+  .gal-stage { padding: 20px 16px; }
+  .gal-stage .shield { inset: 20px 16px; }
+  .gal-strip { background: rgba(255,255,255,.35); }
+  .gal-thumb { width: 72px; height: 108px; }
+  .gal-frame { width: 86px; height: 122px; }
   .slideshow img { object-position: center; }
   .slide-wm { display: block; }
   .slide-cap { left: 16px; }
