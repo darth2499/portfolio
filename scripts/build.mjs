@@ -17,7 +17,8 @@ const img = { fullSize: 2000, thumbWidth: 900, quality: 82, watermark: '', ...co
 const IMAGE_RE = /\.(jpe?g|png|webp|tiff?|avif)$/i;
 // Changing any image setting (or the watermark style version) invalidates the cache automatically.
 const WATERMARK_VERSION = 2;
-const settingsKey = JSON.stringify({ ...img, WATERMARK_VERSION });
+const VARIANTS_VERSION = 2; // adds tiny strip thumbnails + inline blur placeholders
+const settingsKey = JSON.stringify({ ...img, WATERMARK_VERSION, VARIANTS_VERSION });
 
 const slugify = (s) => s.normalize('NFKD').replace(/[\u0300-\u036f]/g, '')
   .toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
@@ -63,9 +64,18 @@ async function processPhoto(file) {
 
   const full = await makeVariant(buf, img.fullSize, img.fullSize, true);
   const thumb = await makeVariant(buf, img.thumbWidth, img.thumbWidth * 2, false);
+  // Tiny thumbnail for the gallery strip (~5 KB) and a ~200-byte blurry preview
+  // that's embedded straight into data.json, so something shows instantly even on slow connections.
+  const small = await sharp(buf, { failOn: 'none' }).rotate()
+    .resize({ width: 200, height: 200, fit: 'inside', withoutEnlargement: true })
+    .webp({ quality: 70 }).toBuffer();
+  const tiny = await sharp(buf, { failOn: 'none' }).rotate()
+    .resize({ width: 20, height: 20, fit: 'inside' })
+    .webp({ quality: 40 }).toBuffer();
   await fs.writeFile(path.join(CACHE, `${hash}-f.webp`), full.data);
   await fs.writeFile(path.join(CACHE, `${hash}-t.webp`), thumb.data);
-  const meta = { w: full.w, h: full.h };
+  await fs.writeFile(path.join(CACHE, `${hash}-s.webp`), small);
+  const meta = { w: full.w, h: full.h, q: `data:image/webp;base64,${tiny.toString('base64')}` };
   await fs.writeFile(metaPath, JSON.stringify(meta));
   return { hash, ...meta };
 }
@@ -103,10 +113,10 @@ async function main() {
 
     const photos = await pool(files, 4, async (f) => {
       const p = await processPhoto(path.join(PHOTOS, folder, f));
-      for (const v of ['f', 't']) {
+      for (const v of ['f', 't', 's']) {
         await fs.copyFile(path.join(CACHE, `${p.hash}-${v}.webp`), path.join(outDir, `${p.hash}-${v}.webp`));
       }
-      return { f: `img/${slug}/${p.hash}-f.webp`, t: `img/${slug}/${p.hash}-t.webp`, w: p.w, h: p.h, cover: /^_?cover/i.test(f) };
+      return { f: `img/${slug}/${p.hash}-f.webp`, t: `img/${slug}/${p.hash}-t.webp`, s: `img/${slug}/${p.hash}-s.webp`, q: p.q, w: p.w, h: p.h, cover: /^_?cover/i.test(f) };
     });
 
     const coverIdx = Math.max(0, photos.findIndex((p) => p.cover));
