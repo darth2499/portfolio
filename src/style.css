@@ -182,11 +182,12 @@ body.is-gallery .main { padding: 0; }
 .gal-pic {
   position: absolute; inset: 0; opacity: 0;
   transition: opacity .3s cubic-bezier(.6,0,.9,1);   /* fading out: holds, then goes */
-  background: center / contain no-repeat;   /* tiny blurred preview, only if nothing else is ready */
+  background: var(--x, 0) var(--y, 0) / var(--w, 0) var(--h, 0) no-repeat;   /* tiny blurred preview, only if nothing else is ready */
 }
 .gal-pic.show { opacity: 1; transition: opacity .3s cubic-bezier(.1,.6,.3,1); }   /* fading in: quick start */
 .gal-pic img {
-  position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain;
+  position: absolute; left: var(--x); top: var(--y);
+  width: var(--w); height: var(--h); object-fit: fill;
 }
 .gal-pic img:not([src]) { visibility: hidden; }
 .gal-pic .hi { opacity: 0; transition: opacity .9s cubic-bezier(.4,0,.2,1); }   /* slow, gentle focus-in */

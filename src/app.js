@@ -239,6 +239,19 @@
       hi.classList.remove('instant'); hi.classList.add('in');
     }
 
+    // Every layer (blurry preview, small, medium, full) is drawn into exactly the same
+    // pixel rectangle. Their file sizes round slightly differently, so letting each one
+    // "contain" itself left a thin coloured sliver at the edges of landscape photos.
+    function fitPic(pic, p) {
+      const box = pic.getBoundingClientRect(), sc = Math.min(box.width / p.w, box.height / p.h);
+      const w = Math.round(p.w * sc), h = Math.round(p.h * sc);
+      pic.style.setProperty('--w', `${w}px`); pic.style.setProperty('--h', `${h}px`);
+      pic.style.setProperty('--x', `${Math.round((box.width - w) / 2)}px`);   // whole pixels = crisp edges
+      pic.style.setProperty('--y', `${Math.round((box.height - h) / 2)}px`);
+      pic.dataset.i = photos.indexOf(p);
+    }
+    function refit() { pics.forEach((pc) => { if (pc.dataset.i) fitPic(pc, photos[+pc.dataset.i]); }); }
+
     function setCurrent(i) {
       const prev = cur;
       cur = Math.max(0, Math.min(n - 1, i));
@@ -248,6 +261,7 @@
       const pic = pics[0] === showing ? pics[1] : pics[0], old = showing;
       const lo = pic.children[0], hi = pic.children[1];
       pic.style.backgroundImage = `url(${p.q})`;
+      fitPic(pic, p);
       hi.classList.add('instant'); hi.classList.remove('in'); hi.removeAttribute('src');
       const have = best(p);
       if (have) lo.src = have; else lo.removeAttribute('src');
@@ -288,14 +302,28 @@
     }
 
     // Mouse wheel / trackpad: anywhere on the page
+    // Mouse wheel = one photo per click. Trackpad = smooth, continuous glide.
+    // (Decided at the start of each gesture: a wheel click arrives as one big jump,
+    //  a trackpad swipe starts with small deltas.)
+    let lastWheel = 0, notchMode = false;
     function onWheel(e) {
       if (!lb.hidden) return;
       e.preventDefault();
       let dlt = Math.abs(e.deltaY) >= Math.abs(e.deltaX) ? e.deltaY : e.deltaX;
       if (e.deltaMode === 1) dlt *= 16;
+      const now = performance.now();
+      if (now - lastWheel > 120) notchMode = e.deltaMode === 1 || Math.abs(dlt) >= 40;
+      lastWheel = now;
+      clearTimeout(snapTimer);
+      if (notchMode) {
+        if (Math.abs(dlt) < 4) return;
+        target = clamp(Math.round(target / step) * step + Math.sign(dlt) * step);
+        kick();
+        return;
+      }
       target = clamp(target + dlt * 0.8);
       kick();
-      clearTimeout(snapTimer); snapTimer = setTimeout(snap, 160);
+      snapTimer = setTimeout(snap, 160);
     }
     // Drag / swipe on the strip or the big photo, with flick momentum
     function onDown(e) {
@@ -345,6 +373,7 @@
     window.addEventListener('wheel', onWheel, { passive: false });
     window.addEventListener('keydown', onKey);
     window.addEventListener('resize', layout);
+    window.addEventListener('resize', refit);
     layout();
 
     return () => {
@@ -352,6 +381,7 @@
       window.removeEventListener('wheel', onWheel);
       window.removeEventListener('keydown', onKey);
       window.removeEventListener('resize', layout);
+      window.removeEventListener('resize', refit);
     };
   }
 
